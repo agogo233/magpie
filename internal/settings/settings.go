@@ -602,8 +602,15 @@ type Settings struct {
 	// so downloading one (#472): only Settings' Check, or magpie update,
 	// asks then. UpdateEvery is how often it asks otherwise, in minutes:
 	// one of UpdateEveries, 0 for every six hours.
-	NoAutoUpdate bool `json:"noAutoUpdate,omitempty"`
-	UpdateEvery  int  `json:"updateEvery,omitempty"`
+	// NoAutoUpdateSet is whether the user set it (settings.json has the
+	// key): false for one that never did, which NoAuto reads as off (this
+	// fork's default: no check until one is turned on). It is kept in
+	// memory only; parse rebuilds it from the file's keys. Not written, so
+	// a false is saved as the key it is (no omitempty below), and an
+	// explicit false comes back as set.
+	NoAutoUpdate    bool `json:"noAutoUpdate"`
+	NoAutoUpdateSet bool `json:"-"`
+	UpdateEvery     int  `json:"updateEvery,omitempty"`
 	// NoAutoDownload has a check, by the clock or Settings' Check, only
 	// say a newer version is out (with its notes and size) rather than
 	// download it (#2296): a metered network or a proxy billed by traffic
@@ -2166,8 +2173,10 @@ func loadChecked() (Settings, error) {
 	b, err := through("settings", Path(), func(b []byte) ([]byte, error) { return b, nil })
 	if err != nil {
 		if os.IsNotExist(err) {
-			// a new install: With window is its default
+			// a new install: With window is its default; no key set,
+			// checks are off (this fork's default)
 			s.DockSettled = true
+			s.NoAutoUpdate = true
 			return s.normal(), nil
 		}
 		return s.settleDock().normal(), fmt.Errorf("could not read settings at %s: %w", Path(), err)
@@ -2179,7 +2188,7 @@ func loadChecked() (Settings, error) {
 // what `magpie settings list` shows as each one's default, and what
 // `magpie settings reset` puts back.
 func Defaults() Settings {
-	return Settings{DockSettled: true}.normal()
+	return Settings{DockSettled: true, NoAutoUpdate: true}.normal()
 }
 
 // settleDock reads a Dock choice written before With window was the
@@ -2224,6 +2233,7 @@ func parse(b []byte) (Settings, error) {
 	parses.Add(1)
 	perr := json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &s)
 	if perr == nil {
+		s = s.noAutoDefault(b)
 		s = s.settleDock()
 		// only what parsed whole is kept: a last good generation read in
 		// its place is read again, as is a file that can't be read at all
@@ -2237,10 +2247,24 @@ func parse(b []byte) (Settings, error) {
 	if ferr == nil {
 		s = Settings{}
 		_ = json.Unmarshal(bytes.TrimPrefix(bak, []byte("\xef\xbb\xbf")), &s)
+		s = s.noAutoDefault(bak)
 	} else if len(bytes.TrimSpace(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")))) != 0 {
 		err = fmt.Errorf("could not read settings at %s: %w", Path(), perr)
 	}
 	return s.settleDock().normal(), err
+}
+
+// noAutoDefault is s with noAutoUpdate's set marker read from the file's
+// keys: no key is this fork's default, checks off until one is turned
+// on; the key present (true or false) is a settings.json that named it.
+func (s Settings) noAutoDefault(b []byte) Settings {
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal(bytes.TrimPrefix(b, []byte("\xef\xbb\xbf")), &fields)
+	_, s.NoAutoUpdateSet = fields["noAutoUpdate"]
+	if !s.NoAutoUpdateSet {
+		s.NoAutoUpdate = true
+	}
+	return s
 }
 
 // parses counts settings.json's parses (Parses).
@@ -3035,6 +3059,13 @@ func saveOwn(s Settings, recording, reads bool) error {
 		catalog.Forget()
 	}
 	return nil
+}
+
+// NoAuto is whether automatic update checks are off: the user turned
+// them off, or never set them and this fork's default leaves them off
+// (no check until one is turned on; a set false turns them on).
+func (s Settings) NoAuto() bool {
+	return !s.NoAutoUpdateSet || s.NoAutoUpdate
 }
 
 func (s Settings) normal() Settings {

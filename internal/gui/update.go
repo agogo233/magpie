@@ -202,7 +202,7 @@ var updates = &updater{}
 // settings' interval is up. The settings are read again each minute, so
 // one changed (in Settings or the CLI) counts from the last check.
 func updateDue(s settings.Settings, last, now time.Time) bool {
-	return !s.NoAutoUpdate && now.Sub(last) >= time.Duration(s.UpdateEvery)*time.Minute
+	return !s.NoAuto() && now.Sub(last) >= time.Duration(s.UpdateEvery)*time.Minute
 }
 
 func (u *updater) start() {
@@ -242,7 +242,7 @@ func (u *updater) start() {
 // download failed is tried again retryAfter after the last try, not six
 // hours later with the header's Update offering it meanwhile.
 func fetchDue(s settings.Settings, state string, retry bool, last, now time.Time) bool {
-	if s.NoAutoUpdate || s.NoAutoDownload {
+	if s.NoAuto() || s.NoAutoDownload {
 		return false
 	}
 	switch state {
@@ -522,7 +522,7 @@ func (u *updater) latestStale() bool {
 // stale "latest", unless automatic updates are off. It doesn't wait for
 // the answer: the row shows checking, and reads again.
 func (u *updater) refreshLatest(s settings.Settings) {
-	if s.NoAutoUpdate {
+	if s.NoAuto() {
 		return
 	}
 	u.mu.Lock()
@@ -944,7 +944,7 @@ func (u *updater) relang(version, lang string) {
 	if u.latest == nil || u.latest.Version != version || rel.Version != version {
 		newer := u.latest != nil && update.Newer(rel.Version, u.latest.Version)
 		u.mu.Unlock()
-		if newer && !settings.Load().NoAutoUpdate {
+		if newer && !settings.Load().NoAuto() {
 			// the feed names a newer version than the one held: it is
 			// checked for, and so downloaded, now (canlee886 on X)
 			u.checkByClock()

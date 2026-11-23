@@ -19,6 +19,10 @@ import (
 // with automatic updates on; with them off it asks nothing by itself.
 func TestStaleLatestIsNotUpToDate(t *testing.T) {
 	sandboxHome(t)
+	// the test's premise: automatic updates are on
+	if err := settings.Save(settings.Settings{NoAutoUpdate: false}); err != nil {
+		t.Fatal(err)
+	}
 	var newest atomic.Value
 	newest.Store("0.1.1402")
 	var asks atomic.Int32

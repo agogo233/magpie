@@ -154,7 +154,7 @@ func TestUpdateClockFetchesNewerThanWaiting(t *testing.T) {
 // hour after a download failed (error with retry), not six hours later.
 func TestUpdateFetchDue(t *testing.T) {
 	now := time.Now()
-	auto := settings.Settings{}
+	auto := settings.Settings{NoAutoUpdateSet: true}
 	for _, c := range []struct {
 		name  string
 		s     settings.Settings

@@ -44,6 +44,7 @@ func updateAutoCmd(args []string) error {
 		switch a {
 		case "on", "off":
 			s.NoAutoUpdate = a == "off"
+			s.NoAutoUpdateSet = true
 		case "download", "notify":
 			s.NoAutoDownload = a == "notify"
 		default:
@@ -65,7 +66,7 @@ func updateAutoCmd(args []string) error {
 			every = k
 		}
 	}
-	if s.NoAutoUpdate {
+	if s.NoAuto() {
 		fmt.Println("automatic updates are off", muted.Render("· magpie update or Settings' Check looks for one (every "+every+" when on)"))
 		if s.NoAutoDownload {
 			fmt.Println(muted.Render("  a newer version found is only said to be out; Download update or magpie update downloads it"))

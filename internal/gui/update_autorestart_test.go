@@ -34,7 +34,7 @@ func TestAutoRestartWaitsForIdle(t *testing.T) {
 			t.Fatalf("%+v: a restart waits", s)
 		}
 	}
-	on := settings.Settings{AutoRestart: true}
+	on := settings.Settings{AutoRestart: true, NoAutoUpdateSet: true}
 	u.autoTick(on)
 	if w, _ := u.waitingFor(); !w {
 		t.Fatal("AutoRestart on, update ready: no restart waits")

@@ -153,7 +153,7 @@ func UpdateRemotes(ctx context.Context, version string) {
 	if !update.Released(version) {
 		return
 	}
-	if s, err := settings.LoadChecked(); err != nil || s.NoAutoUpdate {
+	if s, err := settings.LoadChecked(); err != nil || s.NoAuto() {
 		return
 	}
 	var wg sync.WaitGroup

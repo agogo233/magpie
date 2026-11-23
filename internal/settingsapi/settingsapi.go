@@ -199,6 +199,14 @@ func Merge(body []byte, cur settings.Settings, web bool) (settings.Settings, err
 	if _, sent := fields["updateChannel"]; !sent {
 		in.UpdateChannel = cur.UpdateChannel
 	}
+	// a body that names noAutoUpdate set it (true or false), so the
+	// fork's default (unset: checks off) is not read as the user's own;
+	// one that doesn't leaves the setting as it was
+	if _, sent := fields["noAutoUpdate"]; sent {
+		in.NoAutoUpdateSet = true
+	} else {
+		in.NoAutoUpdate, in.NoAutoUpdateSet = cur.NoAutoUpdate, cur.NoAutoUpdateSet
+	}
 	// nor whether the masked words match in any case
 	if _, sent := fields["redactWordsAnyCase"]; !sent {
 		in.RedactWordsAnyCase = cur.RedactWordsAnyCase

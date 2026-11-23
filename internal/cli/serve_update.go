@@ -51,7 +51,7 @@ func serveUpdateAsked(follow *serveFollow) func(want string) provider.RemoteUpda
 		case !update.Newer(want, version):
 			return provider.RemoteUpdate{State: "current"}
 		}
-		if s := settings.Load(); s.NoAutoUpdate || s.NoAutoDownload {
+		if s := settings.Load(); s.NoAuto() || s.NoAutoDownload {
 			return provider.RemoteUpdate{State: "off"}
 		}
 		app := update.Bundle()

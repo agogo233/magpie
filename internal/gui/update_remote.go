@@ -23,7 +23,7 @@ func (u *updater) updateAsked(want string) provider.RemoteUpdate {
 	case !update.Newer(want, Version):
 		return provider.RemoteUpdate{State: "current"}
 	}
-	if s := settings.Load(); s.NoAutoUpdate || s.NoAutoDownload {
+	if s := settings.Load(); s.NoAuto() || s.NoAutoDownload {
 		return provider.RemoteUpdate{State: "off"}
 	}
 	u.mu.Lock()

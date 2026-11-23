@@ -15,8 +15,8 @@ func TestUpdateDue(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	now := time.Now()
 	s := settings.Load()
-	if s.NoAutoUpdate || s.UpdateEvery != 360 {
-		t.Fatalf("default: auto off %v, every %d", s.NoAutoUpdate, s.UpdateEvery)
+	if !s.NoAuto() || s.UpdateEvery != 360 {
+		t.Fatalf("default: checks off %v, every %d", s.NoAuto(), s.UpdateEvery)
 	}
 	for _, c := range []struct {
 		off   bool
@@ -33,7 +33,7 @@ func TestUpdateDue(t *testing.T) {
 		{false, 1440, 24 * time.Hour, true},
 		{true, 30, 48 * time.Hour, false},
 	} {
-		s.NoAutoUpdate, s.UpdateEvery = c.off, c.every
+		s.NoAutoUpdate, s.NoAutoUpdateSet, s.UpdateEvery = c.off, true, c.every
 		if err := settings.Save(s); err != nil {
 			t.Fatal(err)
 		}
@@ -42,11 +42,11 @@ func TestUpdateDue(t *testing.T) {
 		}
 	}
 	// never asked: due at start-up, unless turned off
-	s.NoAutoUpdate, s.UpdateEvery = false, 1440
+	s.NoAutoUpdate, s.NoAutoUpdateSet, s.UpdateEvery = false, true, 1440
 	if !updateDue(s, time.Time{}, now) {
 		t.Error("never asked, on: not due")
 	}
-	s.NoAutoUpdate = true
+	s.NoAutoUpdate, s.NoAutoUpdateSet = true, true
 	if updateDue(s, time.Time{}, now) {
 		t.Error("never asked, off: due")
 	}

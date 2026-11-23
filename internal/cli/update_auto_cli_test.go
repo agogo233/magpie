@@ -78,20 +78,20 @@ func TestUpdateAutoCmd(t *testing.T) {
 	if err := updateCmd([]string{"update", "auto"}); err != nil {
 		t.Fatal(err)
 	}
-	if s := settings.Load(); s.NoAutoUpdate || s.UpdateEvery != 360 {
-		t.Fatalf("default: off %v, every %d", s.NoAutoUpdate, s.UpdateEvery)
+	if s := settings.Load(); !s.NoAuto() || s.UpdateEvery != 360 {
+		t.Fatalf("default: checks off %v, every %d", s.NoAuto(), s.UpdateEvery)
 	}
 	if err := updateCmd([]string{"update", "auto", "off", "30m"}); err != nil {
 		t.Fatal(err)
 	}
-	if s := settings.Load(); !s.NoAutoUpdate || s.UpdateEvery != 30 {
-		t.Fatalf("off 30m: off %v, every %d", s.NoAutoUpdate, s.UpdateEvery)
+	if s := settings.Load(); !s.NoAuto() || s.UpdateEvery != 30 {
+		t.Fatalf("off 30m: checks off %v, every %d", s.NoAuto(), s.UpdateEvery)
 	}
 	if err := updateCmd([]string{"update", "auto", "on"}); err != nil {
 		t.Fatal(err)
 	}
-	if s := settings.Load(); s.NoAutoUpdate || s.UpdateEvery != 30 {
-		t.Fatalf("on: off %v, every %d", s.NoAutoUpdate, s.UpdateEvery)
+	if s := settings.Load(); s.NoAuto() || s.UpdateEvery != 30 {
+		t.Fatalf("on: checks off %v, every %d", s.NoAuto(), s.UpdateEvery)
 	}
 	for _, a := range []string{"1h", "24h", "6h"} {
 		if err := updateCmd([]string{"update", "auto", a}); err != nil {
@@ -106,8 +106,8 @@ func TestUpdateAutoCmd(t *testing.T) {
 	if err := updateCmd([]string{"update", "auto", "notify"}); err != nil {
 		t.Fatal(err)
 	}
-	if s := settings.Load(); !s.NoAutoDownload || s.NoAutoUpdate || s.UpdateEvery != 360 {
-		t.Fatalf("notify: download held %v, off %v, every %d", s.NoAutoDownload, s.NoAutoUpdate, s.UpdateEvery)
+	if s := settings.Load(); !s.NoAutoDownload || s.NoAuto() || s.UpdateEvery != 360 {
+		t.Fatalf("notify: download held %v, checks off %v, every %d", s.NoAutoDownload, s.NoAuto(), s.UpdateEvery)
 	}
 	if err := updateCmd([]string{"update", "auto", "download"}); err != nil {
 		t.Fatal(err)

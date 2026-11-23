@@ -1804,7 +1804,7 @@ func Handler(w Windows, gw *gateway.Server) http.Handler {
 		// version row and the header's Update follow (a download from
 		// every version is dropped on Stable, run), unless automatic
 		// updates are off and nothing was found
-		if in.UpdateChannel != cur.UpdateChannel && (!in.NoAutoUpdate || updates.json().Latest != "") && updates.begin() {
+		if in.UpdateChannel != cur.UpdateChannel && (!in.NoAuto() || updates.json().Latest != "") && updates.begin() {
 			go updates.run()
 		}
 		writeJSON(rw, settingsState())
