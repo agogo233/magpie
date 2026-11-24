@@ -288,7 +288,7 @@ function svg(d, size = 12, stroke = 1.6) {
   s.innerHTML = `<path d="${d}" fill="none" stroke="currentColor" stroke-width="${stroke}" stroke-linecap="round" stroke-linejoin="round"/>`;
   return s;
 }
-const CHEV = "m5.5 6.5 2.5 2.5 2.5-2.5";
+const CHEV = "m5.5 6.8 2.5 2.5 2.5-2.5";
 // three dots, a row's actions (drawn with a thick round stroke)
 const DOTS = "M3.5 8h.01M8 8h.01M12.5 8h.01";
 const CHEV_R = "m6.5 4.5 3 3.5-3 3.5";
@@ -3411,8 +3411,10 @@ async function openAgentModels(a, anchor, ev) {
   // until it is ticked (#1337), not every one not taken out
   // own: its pickers offer models the agent reaches on its own beside
   // magpie's (DeepSeek Harness's), which ownHidden leaves out (#1642)
-  let models, ordered = false, only = false, own = false, ownHidden = false;
-  try { ({ models, ordered, only = false, own = false, ownHidden = false } = await api("agent-models/" + encodeURIComponent(a.id))); }
+  // joins: shown only its picks, it takes in the models ticked in a
+  // provider's editor too (eiyuuzaki2333 on X)
+  let models, ordered = false, only = false, own = false, ownHidden = false, joins = false;
+  try { [{ models, ordered, only = false, own = false, ownHidden = false, joins = false }] = await Promise.all([api("agent-models/" + encodeURIComponent(a.id)), import("./agentjoin.js").catch(() => {})]); }
   catch (e) {
     if (agentModelsLoading === loading) { loading.drop(); statusErr(e); }
     return;
@@ -3467,9 +3469,13 @@ async function openAgentModels(a, anchor, ev) {
   const onlySw = libSwitch("use-credits", only, onlySay.textContent);
   onlyBox.title = t("Off: new models are shown. On: only the models ticked here are shown, and a model added later, of any provider, stays off until you tick it");
   onlyBox.append(onlySw, onlySay);
+  // only with Only models I pick on: shown every model, an agent has a
+  // provider's picks already (agentjoin.js)
+  const joinBox = window.amJoin?.(a, joins, () => me, () => disarm()) || el("i");
+  joinBox.hidden = !only;
   // takes back a first click on Hide all or Show all (twice, below)
   let disarm = () => {};
-  foot.append(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset);
+  foot.append(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset, joinBox);
   // groups as the catalog has them, routing groups first; a long one
   // starts folded, unless the agent is set to a model in it
   const groups = [];
@@ -3602,6 +3608,7 @@ async function openAgentModels(a, anchor, ev) {
     only = !only;
     onlySw.classList.toggle("on", only);
     onlySw.setAttribute("aria-checked", String(only));
+    joinBox.hidden = !only;
     me.changed = true;
     // the models shown stay as they are, so the list drawn needs nothing
     // new; what comes back is the same, but for one added meanwhile
@@ -3613,6 +3620,7 @@ async function openAgentModels(a, anchor, ev) {
         only = !want;
         onlySw.classList.toggle("on", only);
         onlySw.setAttribute("aria-checked", String(only));
+        joinBox.hidden = !only;
       });
   };
   ownSw.onclick = (e) => {
@@ -3790,7 +3798,7 @@ async function openAgentModels(a, anchor, ev) {
       : kindOf(a) === "codex" ? t("Drag to put them in the order {agent} lists them; new models go last", { agent: a.name })
       : t("Drag to put them in the order magpie hands them to {agent}; new models go last", { agent: a.name });
     if (order) foot.replaceChildren(footNote, el("span", "sp"), unorder);
-    else foot.replaceChildren(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset);
+    else foot.replaceChildren(onlyBox, el("span", "sp"), hideAll, el("span", "am-dot", "·"), reset, joinBox);
     list.scrollTop = 0;
     draw();
   };
@@ -9995,6 +10003,8 @@ function drawEditor(p, presetID) {
     };
     side.append(b);
   }
+  // a Vibe plan's key from a sign-in to Mistral (mistralsignin.js)
+  if (pr?.id === "mistral") import("./mistralsignin.js").then(() => mistralSignIn(side, key, save), () => {});
   const keyWrap = el("div", "pair");
   keyWrap.append(key, side);
   // Vertex AI: no key, the user's Google Cloud project's token
@@ -11284,11 +11294,12 @@ function addFormModels(ex) {
       const r = await api("provider/list", body);
       listed = r?.models || [];
       out.replaceChildren();
-      if (!listed.length) { out.append(el("span", "hint", t(r?.retrieval ? emptyModelsHint(r) : "The vendor's list is empty. Type the model ids instead."))); return; }
+      const rr = retrievalRows(r, 1);
+      if (!listed.length) { out.append(...rr[0] ? rr : [el("span", "hint", t("The vendor's list is empty. Type the model ids instead."))]); return; }
       q.placeholder = t("filter {n} models…", { n: listed.length });
       // the picks' count and Pick all / none above the chips: they stay put
       if (listed.length > 24) out.append(q);
-      out.append(acts, chips);
+      out.append(acts, chips, ...rr);
       draw();
     } catch (err) { out.replaceChildren(el("span", "hint err", err.message)); }
     finally { go.classList.remove("busy"); }
@@ -11539,7 +11550,7 @@ let picksLeft = null;
 const MCHIPS_MAX = 240;
 // emptyModelsHint: an empty list's words; Azure's is its deployments (#1995)
 function emptyModelsHint(p) {
-  if (p.retrieval) return "Only embedding and rerank models are listed. They need no pick: ask them on /v1/embeddings and /v1/rerank.";
+  if (p.retrieval) return "No models to chat with: its embedding and rerank models are below.";
   if (p.preset !== "azure") return "The vendor's list is empty. Fetch models again, or type a model id.";
   if (providers?.fetching && !p.fetched && !p.listError) return "Asking your resource for its deployments with this key…";
   return "No deployments came back for this key. Fetch models again, or type a deployment's name as a model id.";
@@ -12420,14 +12431,14 @@ function renderVideomakers(p) {
 
 // retrievalRows: its embedding and rerank models, which need no pick and
 // aren't among its models since agents don't chat with them: they were
-// nowhere to be seen (@rfiacne on X)
-function retrievalRows(p) {
-  return [["Embedding models", p?.embedIds], ["Rerank models", p?.rerankIds]].flatMap(([l, v]) => {
-    if (!v) return [];
-    const d = el("div", "mchips still");
-    d.append(...v.map((id) => el("span", "mchip", id)));
-    return field(t(l), d);
-  });
+// nowhere to be seen (@rfiacne on X). Each kind with the path it is asked
+// on, drawn by retrievalrows.js; inline in the add form's Fetch models,
+// where a count alone read as no models (solider1394 on X)
+function retrievalRows(p, inline, at = el("span")) {
+  if (!p?.embedIds && !p?.rerankIds) return [];
+  at.hidden = 1;
+  import("./retrievalrows.js").then(() => at.isConnected && at.replaceWith(...retrievalField(p, inline)), () => {});
+  return [at];
 }
 
 function mediaChips(cls, ids, key, p, names) {
@@ -12614,7 +12625,7 @@ function renderRouting(p) {
     // in turn and by weight go round already
     kLabel.hidden = kWrap.hidden = routingNow() === "rotate" || routingNow() === "weight";
     // each key's or account's weight shows beside it while by weight
-    for (const l of document.querySelectorAll(".accts")) if (l.dataset.provider === p.id) l.classList.toggle("weighted", routingNow() === "weight");
+    for (const l of document.querySelectorAll(".accts")) if (l.dataset.provider === p.id) l.classList.toggle("weighted", routingNow() === "weight"), l.onrouting?.();
   };
   const rPick = routingSegs(routingsOf(p).map(([id, name, , js]) => [id, ROUTINGS.some((r) => r[0] === id) ? t(name) : name, , js]), routingNow(), (routing) => { draft.routing = routing; drawRouting(); });
   const rRow = el("div", "route-pick");
@@ -13848,6 +13859,10 @@ function renderAccounts(a, p) {
     } else if (l.active) {
       const using = el("span", "using", l.paused ? t("Paused") : back ? t("First for now") : several ? t("First") : t("In use"));
       if (back && !l.paused) using.title = t("{user} was nearly used up, so magpie signed {agent} in to this one; it goes back to {user} once that has room again", { user: back.user, agent: a.agentName });
+      // By weight it is only the one signed in to: the weights share the
+      // conversations out, not the order (Wing8Aqua on X read First as the
+      // account used most); drawRouting tells it the routing picked now
+      else if (several && !l.paused) (list.onrouting = () => { const w = list.matches(".weighted"); using.textContent = t(w ? "Signed in" : "First"); w ? using.title = t("By weight, each new conversation goes to an account by its weight and stays there") : using.removeAttribute("title"); })();
       line.append(using);
       if (a.agent === "qoder" || a.agent === "qoder-cn" || l.own) {
         line.append(forgetOf(l.own));
@@ -16596,6 +16611,8 @@ function renderQuotas(lazy) {
         }
         box.append(r);
       }
+      // a Claude account at its limit: where its free resets are used
+      if (!brief && !history) box.append(claudeResets(sub, "quota-resets", "text"));
       // the account's standing say on its resets, held or not (#719)
       const policy = !brief && !history && autoResetRow(sub, "quota-autoreset");
       if (policy) box.append(policy);
@@ -18138,6 +18155,7 @@ function panelQuotaCard(q, first = false) {
     }
     card.append(r);
   }
+  card.append(claudeResets(q, "pq-resets", "pq-use"));
   const policy = autoResetRow(q, "pq-autoreset");
   const credits = creditsRow(q, "pq-credits");
   if (policy || credits) {
@@ -18234,6 +18252,22 @@ function resetsEach(r) {
 function codexResetCard(q) {
   if (!q.resets || q.resets.byWindow) return false;
   return q.provider === "codex" || !!(q.from && q.user && /^[^/]+\/codex$/.test(q.provider || ""));
+}
+
+// Claude's limit resets (support.claude.com/en/articles/17007452) are
+// free, given now and then to some plans, and used only in claude.ai's
+// Settings › Usage, on the web, the desktop or the mobile apps, never from
+// Claude Code. (Claude Code's hidden /limit-reset is a trial behind
+// Anthropic's own flags, and magpie never asks Anthropic itself with a
+// Claude sign-in.) A Claude card at a used-up limit opens that page; any
+// other card has "" (ahz2ygnhjmIJ0E0 on X: "cc有reset的功能，magpie能接入吗").
+function claudeResets(q, c, b) {
+  if (q.error || !/^([^/]+\/)?claude$/.test(q.provider) || !q.windows?.some((w) => !w.text && !w.lane && w.used >= 100)) return "";
+  const r = el("div", c + " claude-resets"), go = el("button", b, t("Open ↗"));
+  r.append(el("span", "", t("Limit resets are used on claude.ai")), go);
+  go.title = t("Claude gives some plans a free limit reset now and then. Use it in Settings › Usage on claude.ai, signed in as this account.");
+  go.onclick = (e) => { e.stopPropagation(); api("open", { url: "https://claude.ai/settings/usage" }).catch(() => {}); };
+  return r;
 }
 
 // resetUseTitle: a use spends the one that runs out first
@@ -23926,10 +23960,10 @@ document.fonts?.ready.then(fitTop);
 // a font picked later (Settings' Font) can still be loading when it's applied
 document.fonts?.addEventListener("loadingdone", fitTop);
 
-// the shown page's tab; Routing's for its groups in the header's row,
-// which has no room for theirs (app.css)
+// the shown page's tab; in the header's row, which has no room for theirs
+// (app.css), Routing's for its groups and Library's for Artifacts
 function markNav(v) {
-  const tab = v === "groups" && !sideNav() ? "routing" : v;
+  const tab = sideNav() ? v : { groups: "routing", artifacts: "library" }[v] || v;
   for (const b of $("#nav").querySelectorAll("button[data-view]")) {
     const on = b.dataset.view === tab;
     b.classList.toggle("on", on);

@@ -55,7 +55,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie tui                      the same thing, in the terminal (serves the gateway while open when no magpie does)
   magpie web [--addr host:port] [--lan] [--no-open] [--gateway] [--tls-cert <file> --tls-key <file>]
                                   the app's window in a browser, with the gateway (no desktop needed: WSL, a server over SSH)
-                                  a new key each run; MAGPIE_WEB_KEY (16+ letters, digits, - . _ ~) keeps one, signed in for 400 days
+                                  a new key each run, signed in until the next; MAGPIE_WEB_KEY (16+ letters, digits, - . _ ~) keeps one, signed in for 400 days
                                   behind a reverse proxy, MAGPIE_WEB_URL=https://<the page there> prints the link through it
                                   --gateway: gateway mode, no Agents, Sessions or Library (on by itself with no agents here; Settings › General turns it off)
                                   --tls-cert/--tls-key: the page and the gateway over https:// to other computers
@@ -86,6 +86,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie github [on github://<owner>/<repo>[/<folder>]|set k=v…|now|off]   the same in an encrypted GitHub repository (magpie github help)
 
   magpie library [sync|instructions|mcp|skill]   the instructions, MCP servers and skills written into every agent (magpie library help)
+  magpie artifacts [open <id>|delete <id>] [--json]   the pages agents published through Magpie Artifacts, as Work › Artifacts lists them
 
   magpie providers                list your providers: host, key, models, who uses them
   magpie presets                  the vendors magpie knows: add one with just a key
@@ -98,7 +99,7 @@ const usage = `magpie — one place to pick every agent's model
   magpie model name <provider/model> <name>|--reset       the name a model goes by, everywhere
   magpie model efforts <provider/model> <l>,<l>|--reset   the reasoning levels a model offers (magpie model help)
   magpie model api <provider/model> chat|responses|anthropic|gemini|auto   the API a model is asked on
-  magpie visible [<agent> <family|provider|group>,… | all | --only-picked | --show-new]
+  magpie visible [<agent> <family|provider|group>,… | all | --only-picked | --show-new | --provider-picks]
                                   which models an agent is shown: families (magpie provider/group set <id> family=…),
                                   or only the models ticked for it, a new one off until it is ticked
   magpie search [add <api> <key>|rm <api>]   Tavily, Brave, Exa, Firecrawl, You.com, DeepSeek, Doubao Search (Volcengine), Yuanbao Search (Tencent Cloud), TinyFish or SearXNG for web search when no provider can search
@@ -475,6 +476,9 @@ func run(args []string) error {
 			if len(args) > 1 && args[1] == "sessions" {
 				return browsermcp.RunSessions(args[2:])
 			}
+			if len(args) > 1 && args[1] == "artifacts" {
+				return browsermcp.RunArtifacts(args[2:])
+			}
 			return imagemcp.Run(args[1:])
 		case "claude-mcp-helper": // internal: stdio MCP subprocess spawned by Claude Code
 			return claudebridge.RunMCP(args[1:])
@@ -681,6 +685,8 @@ func run(args []string) error {
 		return usageCmd(args)
 	case "sessions":
 		return sessionsCmd(args)
+	case "artifacts", "artifact":
+		return artifactsCmd(args)
 	case "quota", "quotas":
 		return quotaCmd(args)
 	case "status":
