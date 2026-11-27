@@ -80,6 +80,9 @@ type RequestPage struct {
 	// Big is the request that wrote the most to the cache, of the rows the
 	// filter keeps
 	Big BigWrite
+	// Tools are the MCP tool calls the filter keeps, by tool, when it
+	// keeps those alone (mcpTools)
+	Tools []ToolCalls
 }
 
 type packedRow struct {
@@ -761,6 +764,10 @@ type pageKey struct {
 	// state's key turns with this computer's day, and a reader in another
 	// zone has a today of their own
 	Date string
+	// Zone is the zone the page is cut in, Filter.Zone or, for none,
+	// Zone(""), which Settings' time zone and day start move: a page
+	// asked for with no zone before a change is not served after it
+	Zone *time.Location
 }
 type requestIndex struct {
 	sync.Mutex
@@ -940,7 +947,9 @@ func readRequestState(now time.Time) requestState {
 	meta += "|" + provider.UsageNamesKey()
 	h.Reset()
 	snapshot := readLogSnapshot()
-	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"))
+	// a page asked for with no zone is in Zone(""), which Settings' time
+	// zone and day start move: kept apart by it, not served from before
+	fmt.Fprint(h, meta, snapshot.version, now.In(time.Local).Format("2006-01-02 MST"), "|", Zone("").String())
 	hashCodexIdentities(h, codexIdentities)
 	for _, s := range sources {
 		fmt.Fprintf(h, "%s:%d:%d;", s.Path, s.Size, s.Modified.UnixNano())
@@ -1022,7 +1031,7 @@ func queryPageOf(p Period, f Filter, offset, limit int, readSource func(sessions
 	idx.Lock()
 	idx.keepWhileAsked()
 	idx.adopt(st)
-	q := pageKey{p, f, offset, limit, now.Format(time.DateOnly)}
+	q := pageKey{p, f, offset, limit, now.Format(time.DateOnly), now.Location()}
 	if page, ok := idx.pages[q]; ok {
 		idx.Unlock()
 		return page
@@ -2821,6 +2830,7 @@ func buildRequestBlocksIn(p Period, f Filter, offset, limit int, now time.Time, 
 		}
 	}
 	out.Computers, out.Names = computerShares(computers, names)
+	out.Tools = mcpTools(f, since, p.Until(now), now, gateways)
 	var base []Point
 	var chartSince time.Time
 	chartSince, out.Bucket, base = timeline(p, now, first)
@@ -2928,11 +2938,18 @@ func pageFromLedgerAt(p Period, f Filter, offset, limit int, all Ledgered, now t
 	offset = min(offset, len(l.Rows))
 	out.Rows = l.Rows[offset:min(len(l.Rows), offset+limit)]
 	speeds := speedRank{}
+	tools := mcpTally{}
 	for _, r := range l.Rows {
 		if !r.IsRejected() && !r.IsProbe() {
 			speeds.add(&r)
 			out.Big.add(&r)
 		}
+		if f.picksMCP() && r.Kind == KindMCP {
+			tools.add(&r)
+		}
+	}
+	if f.picksMCP() {
+		out.Tools = tools.list(toolsEnd(p.Until(now), now), f.Day != "")
 	}
 	out.Speeds, out.ProviderSpeeds = speeds.result(), speeds.providers()
 	chartRows := l.Rows

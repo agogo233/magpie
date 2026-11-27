@@ -64,6 +64,17 @@ const groupUsage = `usage:
                                           reasoning or when the cheap ones fail), steady (the strongest model of
                                           each of up to three providers, each behind the other). A name or id in
                                           use is numbered, never replaced
+  magpie group share <id> [--title <t>] [--about <text>] [--by <name>] [--unlisted]
+                                          share a group at a usemagpie.ai/g/… link: listed on usemagpie.ai/groups,
+                                          or --unlisted, opened only by its link. Its models, routing and rules
+                                          go; no key, account or folder, and a provider you added yourself is
+                                          named custom. Again, it updates the link; --stop takes it down;
+                                          --text prints it as text to paste instead, sending nothing. A group
+                                          removed leaves its link up: share <link> --stop takes it down
+  magpie group import <link|text|-> [--over <id>]
+                                          add a group shared at a usemagpie.ai/g/… link (or as text): each model
+                                          you don't have goes to the same model from a provider you have, or is
+                                          left out; --over <id> replaces that group (the author's newer version)
   magpie group rm <id>…                   remove groups (one magpie found is hidden instead)
   magpie group restore <id>               bring back a group magpie found that you removed
   magpie group auto [on|off]              whether magpie finds groups on its own (on by default); off, none is
@@ -72,6 +83,9 @@ const groupUsage = `usage:
                                           them back
   magpie group auto skip <provider>…      keep providers out of the groups magpie finds (groups you made or
                                           changed keep them); skip none lets every one back in
+  magpie group auto one [on|off]          a model one provider alone serves is a found group too (off by
+                                          default), so auto/<model> is there before a second provider lists it
+                                          and stays when one goes; groups you made or changed stay as they are
   magpie group rule add|rm|mv <id> …      rules: which model a turn goes to first, by its length, an image,
                                           the reasoning asked for or the agent (magpie group rule help)
 
@@ -806,6 +820,10 @@ func groupCmd(args []string) error {
 		return showGroup(g)
 	case "template", "templates", "tpl":
 		return templateCmd(rest)
+	case "share", "publish":
+		return groupShareCmd(rest)
+	case "import":
+		return groupImportCmd(rest)
 	case "rule", "rules":
 		return ruleCmd(rest)
 	case "show":
@@ -1087,6 +1105,9 @@ func autoGroupsCmd(args []string) error {
 		if skip := provider.AutoGroupSkip(); len(skip) > 0 {
 			fmt.Println("left out:", strings.Join(skip, ", "), muted.Render("· magpie group auto skip none lets them back in"))
 		}
+		if provider.AutoGroupsOfOneOn() {
+			fmt.Println("groups of one provider are", green.Render("on"), muted.Render("· magpie group auto one off"))
+		}
 		return nil
 	}
 	var on bool
@@ -1096,8 +1117,10 @@ func autoGroupsCmd(args []string) error {
 	case "off", "false", "no", "0":
 	case "skip":
 		return autoGroupSkipCmd(args[1:])
+	case "one":
+		return autoGroupsOfOneCmd(args[1:])
 	default:
-		return fmt.Errorf("magpie group auto [on|off|skip <provider>…|skip none]")
+		return fmt.Errorf("magpie group auto [on|off|skip <provider>…|skip none|one on|off]")
 	}
 	if len(args) > 1 {
 		return fmt.Errorf("magpie group auto [on|off]")
@@ -1152,6 +1175,46 @@ func autoGroupSkipCmd(args []string) error {
 		fmt.Println(green.Render("✓"), "no provider is left out of found groups")
 	} else {
 		fmt.Println(green.Render("✓"), "left out of found groups:", strings.Join(ids, ", "), muted.Render("· the groups you made or changed keep them"))
+	}
+	return nil
+}
+
+// autoGroupsOfOneCmd says whether a model one provider alone serves is a
+// found group too, or turns that on or off (provider.SetAutoGroupsOfOne;
+// realLemonawa on X): off, an agent set to a group of one is moved to its
+// model (agent.Reseat), as the Routing groups page's switch does.
+func autoGroupsOfOneCmd(args []string) error {
+	if len(args) == 0 {
+		if provider.AutoGroupsOfOneOn() {
+			fmt.Println("groups of one provider are", green.Render("on"), muted.Render("· a model one provider serves is a found group too (auto-<model>); magpie group auto one off"))
+		} else {
+			fmt.Println("groups of one provider are", amber.Render("off"), muted.Render("· a found group is a model two or more providers serve; magpie group auto one on"))
+		}
+		return nil
+	}
+	var on bool
+	switch strings.ToLower(args[0]) {
+	case "on", "true", "yes", "1":
+		on = true
+	case "off", "false", "no", "0":
+	default:
+		return fmt.Errorf("magpie group auto one [on|off]")
+	}
+	if len(args) > 1 {
+		return fmt.Errorf("magpie group auto one [on|off]")
+	}
+	moved, err := agent.Reseat(func() error { return provider.SetAutoGroupsOfOne(on) })
+	if err != nil {
+		return err
+	}
+	defer printMoved(moved)
+	if on {
+		fmt.Println(green.Render("✓"), "groups of one provider are on", muted.Render("· a model one provider serves is a found group too"))
+		if !provider.AutoGroupsOn() {
+			fmt.Println(" ", muted.Render("found groups are off, so none is listed yet · magpie group auto on"))
+		}
+	} else {
+		fmt.Println(green.Render("✓"), "groups of one provider are off", muted.Render("· a request for one goes to its model"))
 	}
 	return nil
 }
